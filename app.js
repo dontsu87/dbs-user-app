@@ -3,7 +3,7 @@
  *
  * 外部CDNやフレームワークを使わず、素のJavaScriptのみで動作する。
  * XSS脆弱性を防ぐため、innerHTML は一切使用せず textContent と createElement でDOMを構築する。
- * 外部ネットワーク通信は行わず、同一オリジン内の views/<token>.json のみを取得する。
+ * 外部URLは直接記述せず、window.__DBSCP_CONFIG__ (config.js) から取得した apiUrl に接続する。
  */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -53,10 +53,29 @@ document.addEventListener("DOMContentLoaded", () => {
     return `${hours}時間${remMins}分`;
   }
 
-  function showError(message) {
+  function showError(message, onRetry) {
     loadingEl.classList.add("hidden");
     contentContainerEl.classList.add("hidden");
     errorMessageEl.textContent = message;
+
+    const existingRetryBtn = errorContainerEl.querySelector(".retry-btn");
+    if (existingRetryBtn) {
+      existingRetryBtn.remove();
+    }
+
+    if (typeof onRetry === "function") {
+      const retryBtn = document.createElement("button");
+      retryBtn.className = "btn btn-secondary retry-btn";
+      retryBtn.style.marginTop = "1rem";
+      retryBtn.textContent = "再試行する";
+      retryBtn.addEventListener("click", () => {
+        errorContainerEl.classList.add("hidden");
+        loadingEl.classList.remove("hidden");
+        onRetry();
+      });
+      errorContainerEl.appendChild(retryBtn);
+    }
+
     errorContainerEl.classList.remove("hidden");
   }
 
@@ -69,37 +88,86 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  // URLパラメータからトークン (t または token) を取得
-  const urlParams = new URLSearchParams(window.location.search);
-  const token = urlParams.get("t") || urlParams.get("token");
+  // 鍵をURLのハッシュ（#）で渡す理由:
+  // ハッシュフラグメントはHTTPリクエスト時にサーバへ送信されないため、
+  // Workerのアクセスログや外部参照時のRefererヘッダに鍵が残らない。
+  // クエリパラメータで渡すとサーバログやRefererに記録されてしまい漏洩の危険がある。
+  const hashRaw = window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  const hashParams = new URLSearchParams(hashRaw);
+  const keyParam = hashParams.get("k");
 
-  if (!token || !token.trim()) {
-    showError("URLに認証トークン (?t=...) が指定されていません。招待リンクからアクセスしてください。");
+  let authKey = null;
+
+  if (keyParam && keyParam.trim()) {
+    authKey = keyParam.trim();
+    try {
+      localStorage.setItem("dbscp.key", authKey);
+    } catch {
+      // localStorage が利用できない環境でもメモリ上の鍵で動作を継続
+    }
+    // URLのハッシュから鍵を消去して履歴を置換
+    const cleanUrl = window.location.pathname + window.location.search;
+    window.history.replaceState(null, "", cleanUrl);
+  } else {
+    try {
+      authKey = localStorage.getItem("dbscp.key");
+    } catch {
+      authKey = null;
+    }
+  }
+
+  if (!authKey || !authKey.trim()) {
+    showError("アクセス鍵が見つかりません。招待リンク（#k=...）からアクセスしてください。");
     return;
   }
 
-  const cleanToken = token.trim();
-  // トークン形式検証 (英数字のみ)
-  if (!/^[a-zA-Z0-9_-]+$/.test(cleanToken)) {
-    showError("無効なトークン形式です。");
-    return;
+  fetchBillingView(authKey.trim());
+
+  function fetchBillingView(key) {
+    const config = window.__DBSCP_CONFIG__;
+    if (!config || !config.apiUrl) {
+      showError("配信設定（config.js）が読み込まれていません。");
+      return;
+    }
+
+    const endpoint = config.apiUrl + "/v1/view";
+
+    fetch(endpoint, {
+      headers: {
+        Authorization: "Bearer " + key,
+      },
+    })
+      .then((res) => {
+        if (res.status === 200) {
+          return res.json().then((payload) => {
+            renderPayload(payload);
+          });
+        }
+        if (res.status === 401) {
+          try {
+            localStorage.removeItem("dbscp.key");
+          } catch {
+            // ignore
+          }
+          showError("鍵が正しくありません。正しい招待リンクから再度アクセスしてください。");
+          return;
+        }
+        if (res.status === 404) {
+          showError("まだ請求予定が配信されていません。");
+          return;
+        }
+        showError(`請求予定データを取得できませんでした。(ステータス: ${res.status})`, () => {
+          fetchBillingView(key);
+        });
+      })
+      .catch(() => {
+        showError("請求予定データの取得中に通信エラーが発生しました。", () => {
+          fetchBillingView(key);
+        });
+      });
   }
-
-  const viewUrl = `./views/${encodeURIComponent(cleanToken)}.json`;
-
-  fetch(viewUrl)
-    .then((res) => {
-      if (!res.ok) {
-        throw new Error(`データの取得に失敗しました (ステータス: ${res.status})`);
-      }
-      return res.json();
-    })
-    .then((payload) => {
-      renderPayload(payload);
-    })
-    .catch((err) => {
-      showError(`請求予定データの読み込みに失敗しました: ${err.message}`);
-    });
 
   function renderPayload(payload) {
     loadingEl.classList.add("hidden");
