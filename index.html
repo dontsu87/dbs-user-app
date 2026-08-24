@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>利用状況と請求予定 - カスタムプラン</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="container">
+      <h1 class="app-title">カスタムプラン 利用状況・請求予定</h1>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- ローディング表示 -->
+    <div id="loading" class="card message-card">
+      <p>データを読み込み中...</p>
+    </div>
+
+    <!-- エラー・警告表示 -->
+    <div id="error-container" class="card error-card hidden">
+      <p id="error-message"></p>
+    </div>
+
+    <!-- メインコンテンツ -->
+    <div id="content-container" class="hidden">
+      <!-- 請求予定サマリーカード -->
+      <section class="card summary-card">
+        <div class="summary-header">
+          <span id="target-month" class="badge-month"></span>
+          <span id="plan-version" class="plan-label"></span>
+        </div>
+
+        <div class="total-block">
+          <div class="total-label">当月ご請求予定額</div>
+          <div id="total-amount" class="total-value"></div>
+        </div>
+
+        <div class="comparison-block">
+          <div class="comparison-row">
+            <span class="comparison-label">標準プランの場合:</span>
+            <span id="baseline-amount" class="comparison-value"></span>
+          </div>
+          <div class="comparison-row diff-row">
+            <span class="comparison-label">カスタムプランによる差額:</span>
+            <span id="diff-amount" class="diff-value"></span>
+          </div>
+        </div>
+
+        <div class="status-block">
+          <div class="status-text">
+            <span>状態: </span>
+            <strong id="billing-status" class="status-tag">請求予定（確認期間中）</strong>
+          </div>
+          <div id="schedule-notice" class="schedule-notice"></div>
+        </div>
+      </section>
+
+      <!-- 利用明細一覧カード -->
+      <section class="card">
+        <h2 class="section-title">ご利用明細</h2>
+        <div id="lines-container" class="lines-list"></div>
+      </section>
+
+      <!-- 確認中の貢献カード -->
+      <section id="pending-section" class="card pending-card hidden">
+        <h2 class="section-title">確認中の貢献活動</h2>
+        <p class="pending-note">※以下の貢献活動は現在客観証跡を確認中のため、今月のご請求予定額には含まれていません。</p>
+        <div id="pending-container" class="pending-list"></div>
+      </section>
+
+      <!-- 異議申立セクション -->
+      <section class="card dispute-section">
+        <button id="dispute-btn" class="btn btn-secondary">ご請求内容に異議がある場合</button>
+        <div id="dispute-message" class="dispute-info hidden"></div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="app-footer">
+    <div class="container">
+      <p class="footer-text">Docomo Bike Share Custom Plan Prototype</p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
