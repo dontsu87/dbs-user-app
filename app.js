@@ -10,6 +10,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const loadingEl = document.getElementById("loading");
   const errorContainerEl = document.getElementById("error-container");
   const errorMessageEl = document.getElementById("error-message");
+  const loginContainerEl = document.getElementById("login-container");
   const contentContainerEl = document.getElementById("content-container");
 
   const targetMonthEl = document.getElementById("target-month");
@@ -53,9 +54,12 @@ document.addEventListener("DOMContentLoaded", () => {
     return `${hours}時間${remMins}分`;
   }
 
-  function showError(message, onRetry) {
+  function showError(message, onRetry, retryLabel) {
     loadingEl.classList.add("hidden");
     contentContainerEl.classList.add("hidden");
+    if (loginContainerEl) {
+      loginContainerEl.classList.add("hidden");
+    }
     errorMessageEl.textContent = message;
 
     const existingRetryBtn = errorContainerEl.querySelector(".retry-btn");
@@ -67,16 +71,200 @@ document.addEventListener("DOMContentLoaded", () => {
       const retryBtn = document.createElement("button");
       retryBtn.className = "btn btn-secondary retry-btn";
       retryBtn.style.marginTop = "1rem";
-      retryBtn.textContent = "再試行する";
+      retryBtn.textContent = retryLabel || "再試行する";
       retryBtn.addEventListener("click", () => {
         errorContainerEl.classList.add("hidden");
-        loadingEl.classList.remove("hidden");
         onRetry();
       });
       errorContainerEl.appendChild(retryBtn);
     }
 
     errorContainerEl.classList.remove("hidden");
+  }
+
+  // ログインフォーム表示
+  // 鍵を持たない新規訪問者や、マジックリンクの有効期限切れ時に呼び出される
+  function showLoginForm(initialMessage) {
+    loadingEl.classList.add("hidden");
+    errorContainerEl.classList.add("hidden");
+    contentContainerEl.classList.add("hidden");
+    if (!loginContainerEl) {
+      return;
+    }
+
+    loginContainerEl.textContent = "";
+
+    const titleEl = document.createElement("h2");
+    titleEl.className = "section-title";
+    titleEl.textContent = "メールアドレスでログイン";
+    loginContainerEl.appendChild(titleEl);
+
+    if (initialMessage) {
+      const noticeEl = document.createElement("p");
+      noticeEl.className = "line-meta";
+      noticeEl.style.color = "#c53030";
+      noticeEl.style.marginBottom = "1rem";
+      noticeEl.textContent = initialMessage;
+      loginContainerEl.appendChild(noticeEl);
+    }
+
+    const descEl = document.createElement("p");
+    descEl.className = "line-meta";
+    descEl.style.marginBottom = "1rem";
+    descEl.textContent = "登録されているメールアドレスを入力してください。ログイン用のリンクをお送りします。";
+    loginContainerEl.appendChild(descEl);
+
+    const formEl = document.createElement("form");
+
+    const inputEl = document.createElement("input");
+    inputEl.type = "email";
+    inputEl.name = "email";
+    inputEl.placeholder = "example@example.com";
+    inputEl.required = true;
+    inputEl.style.width = "100%";
+    inputEl.style.padding = "0.6rem";
+    inputEl.style.marginBottom = "0.75rem";
+    inputEl.style.border = "1px solid #cbd5e0";
+    inputEl.style.borderRadius = "4px";
+    inputEl.style.fontSize = "1rem";
+
+    const submitBtn = document.createElement("button");
+    submitBtn.type = "submit";
+    submitBtn.className = "btn btn-secondary";
+    submitBtn.textContent = "ログイン用リンクを送信";
+
+    const resultMsgEl = document.createElement("p");
+    resultMsgEl.className = "line-meta";
+    resultMsgEl.style.marginTop = "1rem";
+
+    formEl.appendChild(inputEl);
+    formEl.appendChild(submitBtn);
+
+    formEl.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const email = inputEl.value.trim();
+      if (!email) {
+        return;
+      }
+
+      // 二重送信を防止
+      submitBtn.disabled = true;
+      inputEl.disabled = true;
+      submitBtn.textContent = "送信中...";
+      resultMsgEl.textContent = "";
+
+      const config = window.__DBSCP_CONFIG__;
+      if (!config || !config.apiUrl) {
+        submitBtn.disabled = false;
+        inputEl.disabled = false;
+        submitBtn.textContent = "ログイン用リンクを送信";
+        resultMsgEl.textContent = "配信設定（config.js）が読み込まれていません。";
+        resultMsgEl.style.color = "#c53030";
+        return;
+      }
+
+      const endpoint = config.apiUrl + "/v1/auth/request";
+
+      fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: email }),
+      })
+        .then((res) => {
+          // Worker側は存在探知防止のため、登録有無やレート制限中にかかわらず 202 を返す。
+          // フロントエンドでも登録の有無による文言の差分を作らず統一した案内を表示する。
+          if (res.ok || res.status === 200 || res.status === 202) {
+            inputEl.classList.add("hidden");
+            submitBtn.classList.add("hidden");
+            descEl.classList.add("hidden");
+            resultMsgEl.textContent =
+              "入力されたアドレスが登録されていれば、ログイン用のリンクをお送りします。メールをご確認ください（届くまで数分かかる場合があります）。";
+            resultMsgEl.style.color = "#2b6cb0";
+            resultMsgEl.style.fontWeight = "600";
+          } else {
+            // 通信障害・サーバ異常などの場合のみ再試行案内を出す
+            submitBtn.disabled = false;
+            inputEl.disabled = false;
+            submitBtn.textContent = "ログイン用リンクを送信";
+            resultMsgEl.textContent = "送信できませんでした。しばらくしてから再試行してください。";
+            resultMsgEl.style.color = "#c53030";
+          }
+        })
+        .catch(() => {
+          submitBtn.disabled = false;
+          inputEl.disabled = false;
+          submitBtn.textContent = "ログイン用リンクを送信";
+          resultMsgEl.textContent = "送信できませんでした。しばらくしてから再試行してください。";
+          resultMsgEl.style.color = "#c53030";
+        });
+    });
+
+    loginContainerEl.appendChild(formEl);
+    loginContainerEl.appendChild(resultMsgEl);
+    loginContainerEl.classList.remove("hidden");
+  }
+
+  // マジックリンクトークンの検証 (/v1/auth/verify)
+  function verifyLoginToken(token) {
+    loadingEl.classList.remove("hidden");
+    errorContainerEl.classList.add("hidden");
+    if (loginContainerEl) {
+      loginContainerEl.classList.add("hidden");
+    }
+    contentContainerEl.classList.add("hidden");
+
+    const config = window.__DBSCP_CONFIG__;
+    if (!config || !config.apiUrl) {
+      showError("配信設定（config.js）が読み込まれていません。");
+      return;
+    }
+
+    const endpoint = config.apiUrl + "/v1/auth/verify";
+
+    fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ token: token }),
+    })
+      .then((res) => {
+        if (res.status === 200) {
+          return res.json().then((data) => {
+            const sessionToken = data && data.session_token;
+            if (sessionToken && typeof sessionToken === "string") {
+              try {
+                localStorage.setItem("dbscp.key", sessionToken);
+              } catch {
+                // localStorage が利用できない環境でもメモリ上の鍵で動作を継続
+              }
+              fetchBillingView(sessionToken);
+            } else {
+              showError("ログイン検証の応答が不正です。");
+            }
+          });
+        }
+        if (res.status === 401) {
+          // リンクの有効期限切れまたは使用済み
+          showLoginForm("リンクの有効期限が切れています。再度ログインしてください。");
+          return;
+        }
+        if (res.status === 403) {
+          // 未プロビジョニング: リンク再送で解決しないため再試行導線は出さない
+          showError("このメールアドレスにはまだ閲覧対象のデータが登録されていません。");
+          return;
+        }
+        showError(`ログイン検証に失敗しました。(ステータス: ${res.status})`, () => {
+          verifyLoginToken(token);
+        });
+      })
+      .catch(() => {
+        showError("ログイン検証中に通信エラーが発生しました。", () => {
+          verifyLoginToken(token);
+        });
+      });
   }
 
   // 単一HTMLとして書き出したときは、データがページ内に埋め込まれている。
@@ -96,10 +284,21 @@ document.addEventListener("DOMContentLoaded", () => {
     ? window.location.hash.slice(1)
     : window.location.hash;
   const hashParams = new URLSearchParams(hashRaw);
+  const loginParam = hashParams.get("login");
   const keyParam = hashParams.get("k");
+
+  // 1. マジックリンクによるログイン (#login=<token>)
+  if (loginParam && loginParam.trim()) {
+    // URLのハッシュからトークンを消去して履歴を置換
+    const cleanUrl = window.location.pathname + window.location.search;
+    window.history.replaceState(null, "", cleanUrl);
+    verifyLoginToken(loginParam.trim());
+    return;
+  }
 
   let authKey = null;
 
+  // 2. 招待キーによるアクセス (#k=<鍵>)
   if (keyParam && keyParam.trim()) {
     authKey = keyParam.trim();
     try {
@@ -111,6 +310,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const cleanUrl = window.location.pathname + window.location.search;
     window.history.replaceState(null, "", cleanUrl);
   } else {
+    // 3. localStorage に保存済みの鍵
     try {
       authKey = localStorage.getItem("dbscp.key");
     } catch {
@@ -118,8 +318,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // 4. 鍵が見つからない場合はログインフォームを表示
   if (!authKey || !authKey.trim()) {
-    showError("アクセス鍵が見つかりません。招待リンク（#k=...）からアクセスしてください。");
+    showLoginForm();
     return;
   }
 
@@ -151,7 +352,13 @@ document.addEventListener("DOMContentLoaded", () => {
           } catch {
             // ignore
           }
-          showError("鍵が正しくありません。正しい招待リンクから再度アクセスしてください。");
+          showError(
+            "鍵が正しくありません。正しい招待リンクから再度アクセスするか、メールアドレスでログインしてください。",
+            () => {
+              showLoginForm();
+            },
+            "ログイン画面へ"
+          );
           return;
         }
         if (res.status === 404) {
@@ -171,6 +378,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderPayload(payload) {
     loadingEl.classList.add("hidden");
+    if (loginContainerEl) {
+      loginContainerEl.classList.add("hidden");
+    }
+    errorContainerEl.classList.add("hidden");
 
     if (!payload || typeof payload !== "object") {
       showError("無効なデータフォーマットです。");
