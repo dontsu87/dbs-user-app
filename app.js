@@ -206,6 +206,45 @@ document.addEventListener("DOMContentLoaded", () => {
     loginContainerEl.classList.remove("hidden");
   }
 
+  // ログイン確認画面の表示
+  // メールセキュリティ（Safe Links 等）のリンクスキャン機能による自動アクセスで
+  // 使い捨てトークンが誤消費されるのを防ぐため、即時検証せず利用者の明示的なボタン操作を挟む。
+  function showLoginConfirm(token) {
+    loadingEl.classList.add("hidden");
+    errorContainerEl.classList.add("hidden");
+    contentContainerEl.classList.add("hidden");
+    if (!loginContainerEl) {
+      return;
+    }
+
+    loginContainerEl.textContent = "";
+
+    const titleEl = document.createElement("h2");
+    titleEl.className = "section-title";
+    titleEl.textContent = "ログインの確認";
+    loginContainerEl.appendChild(titleEl);
+
+    const descEl = document.createElement("p");
+    descEl.className = "line-meta";
+    descEl.style.marginBottom = "1rem";
+    descEl.textContent = "以下のボタンを押してログインを完了してください。";
+    loginContainerEl.appendChild(descEl);
+
+    const confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.className = "btn btn-secondary";
+    confirmBtn.textContent = "ログインする";
+
+    confirmBtn.addEventListener("click", () => {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "確認中...";
+      verifyLoginToken(token);
+    });
+
+    loginContainerEl.appendChild(confirmBtn);
+    loginContainerEl.classList.remove("hidden");
+  }
+
   // マジックリンクトークンの検証 (/v1/auth/verify)
   function verifyLoginToken(token) {
     loadingEl.classList.remove("hidden");
@@ -292,7 +331,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // URLのハッシュからトークンを消去して履歴を置換
     const cleanUrl = window.location.pathname + window.location.search;
     window.history.replaceState(null, "", cleanUrl);
-    verifyLoginToken(loginParam.trim());
+    showLoginConfirm(loginParam.trim());
     return;
   }
 
