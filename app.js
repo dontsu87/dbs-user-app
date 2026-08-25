@@ -427,9 +427,17 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // 基本サマリー情報
     targetMonthEl.textContent = payload.target_month ? `${payload.target_month} 利用分` : "当月利用分";
-    planVersionEl.textContent = payload.plan_version ? `プラン: ${payload.plan_version}` : "";
+
+    // ドコモ・バイクシェア側の契約プラン一覧に実際に表示される名前を優先する。
+    // 依頼者にとって内部のプラン定義バージョン(plan_version)は意味を持たないため。
+    // 取得できていない古いデータ(portal_plan_name が空)では、従来どおり
+    // 内部バージョンを表示してフォールバックする（表示が空白になるよりよい）。
+    if (payload.portal_plan_name) {
+      planVersionEl.textContent = `ご契約プラン: ${payload.portal_plan_name}`;
+    } else {
+      planVersionEl.textContent = payload.plan_version ? `プラン: ${payload.plan_version}` : "";
+    }
 
     // 金額検証と描画
     const totalYen = payload.total_yen;
