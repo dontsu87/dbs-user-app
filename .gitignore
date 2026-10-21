@@ -1,0 +1,21 @@
+# このリポジトリは GitHub Pages で公開される。
+# 請求データ・個人識別子が入る余地を機械的に塞ぐ。
+
+# 請求予定などの表示用データ。ここには決して置かない（配信は R2 + Worker 経由）
+*.json
+views/
+data/
+exports/
+
+# 認証情報
+.env
+.env.*
+*.pem
+*.key
+
+# 作業ファイル
+.venv/
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
